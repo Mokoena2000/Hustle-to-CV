@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'cv_generation_page.dart';
 import '../models/user_model.dart';
-import '../services/ai_services.dart';
+import '../services/api_service.dart';
 import '../utils/constants.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/quick_action_chip.dart';
@@ -22,9 +22,26 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    final welcomeMessage = AIService.generateWelcomeMessage();
-    _addBotMessage(welcomeMessage);
-    _conversationManager.addMessage('assistant', welcomeMessage);
+    _addWelcomeMessages();
+  }
+
+  void _addWelcomeMessages() {
+    final welcomeMessages = [
+      "Hey! I'm your CV Coach! 🚀",
+      "I help South African youth turn everyday activities into professional CV gold!",
+      "Tell me what you enjoy doing - like cleaning, fixing things, helping others, or organizing events!",
+      "I'll transform it into impressive bullet points that employers love! 💼"
+    ];
+
+    // Stagger the welcome messages for better UX
+    for (int i = 0; i < welcomeMessages.length; i++) {
+      Future.delayed(Duration(milliseconds: i * 800), () {
+        if (mounted) {
+          _addBotMessage(welcomeMessages[i]);
+          _conversationManager.addMessage('assistant', welcomeMessages[i]);
+        }
+      });
+    }
   }
 
   void _addBotMessage(String text) {
@@ -54,12 +71,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
     _chatController.clear();
     _addUserMessage(text);
+    
+    // Immediate UI feedback
     setState(() {
       _isTyping = true;
     });
 
+    // Quick response for common phrases
+    if (_isDirectHobbyRequest(text)) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      _handleDirectHobby(text);
+      return;
+    }
+
     try {
-      final response = await AIService.generateChatResponse(
+      final response = await OpenAIService.generateChatResponse(
         text, 
         _conversationManager.history
       );
@@ -67,13 +93,13 @@ class _DashboardPageState extends State<DashboardPage> {
       _addBotMessage(response);
       _conversationManager.addMessage('assistant', response);
 
-      // Check if we should navigate to CV generation
+      // Quick navigation for CV requests
       if (_shouldNavigateToCVGeneration(text, response)) {
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(const Duration(milliseconds: 800));
         _navigateToCVGeneration(text);
       }
     } catch (e) {
-      _addBotMessage("I encountered an issue, but I can still help you create amazing CV content! Try telling me about your hobbies directly.");
+      _addBotMessage("Let me help you create an amazing CV! What do you enjoy doing in your community?");
     } finally {
       setState(() {
         _isTyping = false;
@@ -81,26 +107,50 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  bool _isDirectHobbyRequest(String message) {
+    final directHobbies = [
+      'clean', 'fix', 'help', 'organize', 'teach', 'manage', 
+      'repair', 'garden', 'sport', 'coach', 'volunteer'
+    ];
+    return directHobbies.any((hobby) => message.toLowerCase().contains(hobby));
+  }
+
+  void _handleDirectHobby(String message) {
+    final lower = message.toLowerCase();
+    String response = "";
+    
+    if (lower.contains('clean')) {
+      response = "Awe! Cleaning shows amazing responsibility! 🧹 Let me turn that into professional CV points!";
+    } else if (lower.contains('fix')) {
+      response = "Sharp! Technical skills are in high demand! 💻 Let me make your experience look professional!";
+    } else if (lower.contains('help')) {
+      response = "Helping others shows great character! 🤝 I can transform that into customer service skills!";
+    } else if (lower.contains('organize')) {
+      response = "Organizing is proper project management! 📅 Let me make it shine on your CV!";
+    } else {
+      response = "That's awesome! I can help turn that into professional CV content. Ready to create some bullet points?";
+    }
+    
+    _addBotMessage(response);
+    _conversationManager.addMessage('assistant', response);
+    
+    // Auto-navigate after short delay
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      _navigateToCVGeneration(message);
+    });
+    
+    setState(() {
+      _isTyping = false;
+    });
+  }
+
   bool _shouldNavigateToCVGeneration(String userMessage, String botResponse) {
     final userLower = userMessage.toLowerCase();
-    final botLower = botResponse.toLowerCase();
-    
     return userLower.contains('generate') || 
            userLower.contains('cv') || 
            userLower.contains('resume') ||
            userLower.contains('create') ||
-           botLower.contains('generate') ||
-           (userLower.contains('hobby') && botLower.contains('cv')) ||
-           _isDirectHobbyDescription(userMessage);
-  }
-
-  bool _isDirectHobbyDescription(String message) {
-    final hobbyKeywords = [
-      'clean', 'fix', 'help', 'organize', 'teach', 'manage', 
-      'create', 'build', 'repair', 'maintain', 'coordinate',
-      'garden', 'sport', 'coach', 'volunteer', 'community'
-    ];
-    return hobbyKeywords.any((keyword) => message.toLowerCase().contains(keyword));
+           _isDirectHobbyRequest(userMessage);
   }
 
   void _navigateToCVGeneration(String userInput) {
@@ -113,8 +163,12 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _quickAction(String hobby) {
-    _chatController.text = "I want to create a CV from my experience: $hobby";
+    _chatController.text = "I $hobby";
     _sendMessage();
+  }
+
+  void _fastTrackCV(String hobby) {
+    _navigateToCVGeneration("I $hobby");
   }
 
   @override
@@ -125,48 +179,54 @@ class _DashboardPageState extends State<DashboardPage> {
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Profile page coming soon!')),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.lightbulb_outline),
-            onPressed: () {
-              _quickAction("helping my community with various tasks");
-            },
-            tooltip: 'Get inspired',
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.bolt),
+            onSelected: (value) => _fastTrackCV(value),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'clean the community hall', child: Text('🚀 Fast Track: Cleaning')),
+              const PopupMenuItem(value: 'fix computers and phones', child: Text('🚀 Fast Track: Fixing')),
+              const PopupMenuItem(value: 'help neighbors and community', child: Text('🚀 Fast Track: Helping')),
+              const PopupMenuItem(value: 'organize community events', child: Text('🚀 Fast Track: Organizing')),
+            ],
           ),
         ],
       ),
       body: Column(
         children: [
-          // Quick actions for common hobbies
+          // Enhanced quick actions
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.green[50],
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Quick Start - Common SA Youth Activities:',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green[800],
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.bolt, color: Colors.green[800], size: 20),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Quick Start - Tap Any Activity:',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green[800],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: AppConstants.quickActions
-                      .map((action) => QuickActionChip(
-                            text: action,
+                      .map((action) => ActionChip(
+                            label: Text(action),
                             onPressed: () => _quickAction(action),
+                            backgroundColor: Colors.green[100],
+                            labelStyle: TextStyle(
+                              color: Colors.green[800],
+                              fontWeight: FontWeight.w500,
+                            ),
                           ))
                       .toList(),
                 ),
@@ -191,7 +251,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
           
-          // Input area
+          // Enhanced input area
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -204,7 +264,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: TextField(
                     controller: _chatController,
                     decoration: InputDecoration(
-                      hintText: 'Tell me about your hobbies and I\'ll make them CV-ready...',
+                      hintText: 'What do you enjoy doing? I\'ll make it CV-ready...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),
@@ -217,12 +277,26 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  child: IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: _sendMessage,
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: _isTyping ? 48 : 48,
+                  height: 48,
+                  child: CircleAvatar(
+                    backgroundColor: _isTyping ? Colors.green : Colors.green,
+                    foregroundColor: Colors.white,
+                    child: _isTyping
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.rocket_launch),
+                            onPressed: _sendMessage,
+                          ),
                   ),
                 ),
               ],
@@ -243,49 +317,44 @@ class _DashboardPageState extends State<DashboardPage> {
             child: const Icon(Icons.smart_toy, color: Colors.white, size: 16),
           ),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'CV Coach',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(3),
                   ),
-                  Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                ),
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(3),
                   ),
-                  Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
