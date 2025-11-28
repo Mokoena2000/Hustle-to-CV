@@ -23,3 +23,26 @@ class ChatMessage {
     required this.timestamp,
   });
 }
+
+// New class to track conversation history for AI context
+class ConversationManager {
+  final List<Map<String, String>> _history = [];
+
+  void addMessage(String role, String content) {
+    _history.add({
+      'role': role,
+      'content': content,
+    });
+    
+    // Keep only last 10 messages to manage token usage
+    if (_history.length > 10) {
+      _history.removeAt(0);
+    }
+  }
+
+  List<Map<String, String>> get history => List.from(_history);
+  
+  void clear() {
+    _history.clear();
+  }
+}

@@ -16,12 +16,15 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final TextEditingController _chatController = TextEditingController();
   final List<ChatMessage> _messages = [];
+  final ConversationManager _conversationManager = ConversationManager();
   bool _isTyping = false;
 
   @override
   void initState() {
     super.initState();
-    _addBotMessage(AIService.generateWelcomeMessage());
+    final welcomeMessage = AIService.generateWelcomeMessage();
+    _addBotMessage(welcomeMessage);
+    _conversationManager.addMessage('assistant', welcomeMessage);
   }
 
   void _addBotMessage(String text) {
@@ -42,6 +45,7 @@ class _DashboardPageState extends State<DashboardPage> {
         timestamp: DateTime.now()
       ));
     });
+    _conversationManager.addMessage('user', text);
   }
 
   void _sendMessage() async {
@@ -54,23 +58,49 @@ class _DashboardPageState extends State<DashboardPage> {
       _isTyping = true;
     });
 
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() {
-      _isTyping = false;
-    });
-
-    if (text.toLowerCase().contains('generate') || 
-        text.toLowerCase().contains('cv') || 
-        text.toLowerCase().contains('resume') ||
-        text.toLowerCase().contains('create')) {
-      _addBotMessage(AIService.generateResponse(text));
+    try {
+      final response = await AIService.generateChatResponse(
+        text, 
+        _conversationManager.history
+      );
       
-      await Future.delayed(const Duration(seconds: 1));
-      _navigateToCVGeneration(text);
-    } else {
-      _addBotMessage(AIService.generateResponse(text));
+      _addBotMessage(response);
+      _conversationManager.addMessage('assistant', response);
+
+      // Check if we should navigate to CV generation
+      if (_shouldNavigateToCVGeneration(text, response)) {
+        await Future.delayed(const Duration(seconds: 1));
+        _navigateToCVGeneration(text);
+      }
+    } catch (e) {
+      _addBotMessage("I encountered an issue, but I can still help you create amazing CV content! Try telling me about your hobbies directly.");
+    } finally {
+      setState(() {
+        _isTyping = false;
+      });
     }
+  }
+
+  bool _shouldNavigateToCVGeneration(String userMessage, String botResponse) {
+    final userLower = userMessage.toLowerCase();
+    final botLower = botResponse.toLowerCase();
+    
+    return userLower.contains('generate') || 
+           userLower.contains('cv') || 
+           userLower.contains('resume') ||
+           userLower.contains('create') ||
+           botLower.contains('generate') ||
+           (userLower.contains('hobby') && botLower.contains('cv')) ||
+           _isDirectHobbyDescription(userMessage);
+  }
+
+  bool _isDirectHobbyDescription(String message) {
+    final hobbyKeywords = [
+      'clean', 'fix', 'help', 'organize', 'teach', 'manage', 
+      'create', 'build', 'repair', 'maintain', 'coordinate',
+      'garden', 'sport', 'coach', 'volunteer', 'community'
+    ];
+    return hobbyKeywords.any((keyword) => message.toLowerCase().contains(keyword));
   }
 
   void _navigateToCVGeneration(String userInput) {
@@ -83,7 +113,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _quickAction(String hobby) {
-    _chatController.text = "I $hobby";
+    _chatController.text = "I want to create a CV from my experience: $hobby";
     _sendMessage();
   }
 
@@ -103,6 +133,13 @@ class _DashboardPageState extends State<DashboardPage> {
               );
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.lightbulb_outline),
+            onPressed: () {
+              _quickAction("helping my community with various tasks");
+            },
+            tooltip: 'Get inspired',
+          ),
         ],
       ),
       body: Column(
@@ -115,7 +152,7 @@ class _DashboardPageState extends State<DashboardPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Quick Start:',
+                  'Quick Start - Common SA Youth Activities:',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -167,7 +204,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: TextField(
                     controller: _chatController,
                     decoration: InputDecoration(
-                      hintText: 'Tell me about your hobbies...',
+                      hintText: 'Tell me about your hobbies and I\'ll make them CV-ready...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),
@@ -197,16 +234,59 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildTypingIndicator() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 8.0),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
           CircleAvatar(
             backgroundColor: Colors.green,
-            child: Icon(Icons.smart_toy, color: Colors.white, size: 16),
+            child: const Icon(Icons.smart_toy, color: Colors.white, size: 16),
           ),
-          SizedBox(width: 12),
-          Text('CV Assistant is thinking...'),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'CV Coach',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );

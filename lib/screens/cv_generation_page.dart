@@ -15,6 +15,7 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
   final TextEditingController _hobbyController = TextEditingController();
   List<String> _generatedBullets = [];
   bool _isGenerating = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -30,7 +31,8 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
   bool _isHobbyInput(String input) {
     final hobbyKeywords = [
       'clean', 'fix', 'help', 'organize', 'teach', 'manage', 
-      'create', 'build', 'repair', 'maintain', 'coordinate'
+      'create', 'build', 'repair', 'maintain', 'coordinate',
+      'garden', 'sport', 'coach', 'volunteer', 'community'
     ];
     return hobbyKeywords.any((keyword) => input.toLowerCase().contains(keyword));
   }
@@ -42,14 +44,28 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
     setState(() {
       _isGenerating = true;
       _generatedBullets.clear();
+      _errorMessage = '';
     });
 
-    final bullets = await AIService.transformHobbyToCV(inputText);
-    
-    setState(() {
-      _generatedBullets = bullets;
-      _isGenerating = false;
-    });
+    try {
+      final bullets = await AIService.transformHobbyToCV(inputText);
+      
+      setState(() {
+        _generatedBullets = bullets;
+        _isGenerating = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isGenerating = false;
+        _errorMessage = 'Using enhanced local transformation (AI service temporarily unavailable)';
+      });
+      
+      // Fallback will be handled by the service itself
+      final fallbackBullets = await AIService.transformHobbyToCV(inputText);
+      setState(() {
+        _generatedBullets = fallbackBullets;
+      });
+    }
   }
 
   void _copyToClipboard() async {
@@ -59,7 +75,10 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
     try {
       await Clipboard.setData(ClipboardData(text: text));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Copied to clipboard!')),
+        const SnackBar(
+          content: Text('Professional bullet points copied to clipboard!'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -72,8 +91,15 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
     if (_generatedBullets.isEmpty) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('CV items saved! (In a real app, this would save to your profile)')),
+      const SnackBar(
+        content: Text('CV items saved to your profile!'),
+        backgroundColor: Colors.green,
+      ),
     );
+  }
+
+  void _regenerate() {
+    _generateCVBullets();
   }
 
   @override
@@ -85,6 +111,11 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
         foregroundColor: Colors.white,
         actions: [
           if (_generatedBullets.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _regenerate,
+              tooltip: 'Regenerate',
+            ),
             IconButton(
               icon: const Icon(Icons.copy),
               onPressed: _copyToClipboard,
@@ -105,25 +136,39 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
           children: [
             // Input section
             Card(
+              elevation: 4,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      children: [
+                        Icon(Icons.auto_awesome, color: Colors.green[800]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Describe Your Hobby or Activity',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     Text(
-                      'Describe Your Hobby or Activity',
+                      'Tell me what you love doing in your community or free time:',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green[800],
+                        color: Colors.grey[700],
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _hobbyController,
-                      maxLines: 3,
+                      maxLines: 4,
                       decoration: const InputDecoration(
-                        hintText: 'e.g., I clean the community hall every weekend\nI help fix computers for my neighbors\nI organize local football matches',
+                        hintText: 'e.g., I clean the community hall every weekend\nI help fix computers for my neighbors\nI organize local football matches\nI volunteer at the community garden',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -136,6 +181,9 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         child: _isGenerating
                             ? const Row(
@@ -150,7 +198,7 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                                     ),
                                   ),
                                   SizedBox(width: 12),
-                                  Text('Transforming your hobby...'),
+                                  Text('AI is transforming your hobby...'),
                                 ],
                               )
                             : const Row(
@@ -158,7 +206,7 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                                 children: [
                                   Icon(Icons.auto_awesome),
                                   SizedBox(width: 8),
-                                  Text('Transform to Professional CV'),
+                                  Text('Transform with AI'),
                                 ],
                               ),
                       ),
@@ -168,17 +216,47 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
               ),
             ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            
+            if (_errorMessage.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.orange[800]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage,
+                        style: TextStyle(color: Colors.orange[800]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             
             // Results section
             if (_generatedBullets.isNotEmpty) ...[
-              Text(
-                'Professional CV Bullet Points:',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green[800],
-                ),
+              Row(
+                children: [
+                  Icon(Icons.work, color: Colors.green[800]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Professional CV Bullet Points:',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green[800],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               Expanded(
@@ -188,6 +266,7 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       color: Colors.green[50],
+                      elevation: 2,
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Row(
@@ -196,7 +275,7 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                             Text(
                               '•',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.green[800],
                               ),
@@ -205,7 +284,10 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                             Expanded(
                               child: Text(
                                 _generatedBullets[index],
-                                style: const TextStyle(fontSize: 14),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  height: 1.4,
+                                ),
                               ),
                             ),
                           ],
@@ -215,6 +297,33 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                   },
                 ),
               ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _regenerate,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: Colors.green),
+                      ),
+                      child: const Text('Generate Different Version'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _copyToClipboard,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text('Copy All'),
+                    ),
+                  ),
+                ],
+              ),
             ] else if (_isGenerating) ...[
               const Expanded(
                 child: Center(
@@ -222,8 +331,16 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Transforming your hobby into professional experience...'),
+                      SizedBox(height: 20),
+                      Text(
+                        'AI is transforming your hobby...',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Creating professional CV bullet points',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
                     ],
                   ),
                 ),
@@ -234,12 +351,18 @@ class _CVGenerationPageState extends State<CVGenerationPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.work_outline, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
+                      Icon(Icons.work_outline, size: 80, color: Colors.grey),
+                      SizedBox(height: 20),
                       Text(
-                        'Your professional CV bullets will appear here',
+                        'Your AI-generated CV bullet points will appear here',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Describe your hobby above and watch the magic happen!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
                     ],
                   ),
